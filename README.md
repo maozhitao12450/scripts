@@ -1,6 +1,3 @@
-# scripts 
-一些实用脚本
-
 # vpn-create-vultr.sh 
 一键创建vultr的节点，需要注册并有钱
 
