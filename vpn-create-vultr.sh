@@ -38,18 +38,7 @@ if ! command -v vultr-cli &> /dev/null; then
     mv vultr-cli /usr/local/bin/
 fi
 
-#判断 VULTR_SSH_KEY 是否设置，没有设置则提示
-if [ -z "$VULTR_SSH_KEY" ]; then
-    echo "VULTR_SSH_KEY is not set，please get VULTR_SSH_KEY at : https://my.vultr.com/settings/#settingssshkeys , create it and click edit button"
-    echo "you will see the url,like https://my.vultr.com/sshkeys/manage/?id={this is your ssh_key}"
-    # 让输入
-    read -p "Please enter VULTR_SSH_KEY: " VULTR_SSH_KEY
-    # 设置为永久的环境变量
-    echo "export VULTR_SSH_KEY=$VULTR_SSH_KEY" >> ~/.profile
-    source ~/.profile
-    echo "VULTR_SSH_KEY has save at ~/.profile,you can change it anytime"
-    echo "------------------------------------------"
-fi
+
 
 # 判断 VULTR_API_KEY 是否设置，没有设置则提示
 if [ -z "$VULTR_API_KEY" ]; then
@@ -64,12 +53,34 @@ if [ -z "$VULTR_API_KEY" ]; then
     echo "------------------------------------------"
 fi
 
+#判断 VULTR_SSH_KEY 是否设置，没有设置则提示
+if [ -z "$VULTR_SSH_KEY" ]; then
+    VULTR_SSH_KEY=vultr-cli  ssh-key list | awk 'NR==2' | awk  '{$1}'
+    if [ -z "$VULTR_SSH_KEY" ]; then
+        echo "VULTR_SSH_KEY is not set，please get VULTR_SSH_KEY at : https://my.vultr.com/settings/#settingssshkeys , create it and click edit button"
+        echo "you will see the url,like https://my.vultr.com/sshkeys/manage/?id={this is your ssh_key}"
+        # 让输入
+        read -p "Please enter VULTR_SSH_KEY: " VULTR_SSH_KEY
+    fi
+    # 设置为永久的环境变量
+    echo "export VULTR_SSH_KEY=$VULTR_SSH_KEY" >> ~/.profile
+    source ~/.profile
+    echo "VULTR_SSH_KEY has save at ~/.profile,you can change it anytime"
+    echo "------------------------------------------"
+fi
+
+# 判断之前的实例是否还存活，如果没有则启动，否则直接读取即可，如果 vultr-cli instance list | grep  'Debian 11 x64 (bullseye)' | awk '{print $1}'结果为空则说明没有
+if [ -z "$(vultr-cli instance list | grep  'Debian 11 x64 (bullseye)' | awk '{print }')" ]; then
+echo "no instance,start create"
+
 # 删除之前的实例
-vultr-cli instance list | grep  'Debian 11 x64 (bullseye)' | awk '{print $1}' | xargs vultr-cli instance delete
+#vultr-cli instance list | grep  'Debian 11 x64 (bullseye)' | awk '{print $1}' | xargs vultr-cli instance delete
 # 创建实例
 # ssh key 获取： 打开account-> ssh keys -> 点击编辑 -> url中就包括 https://my.vultr.com/sshkeys/manage/?id={VULTR_SSH_KEY}
 # os 477 Debian 11 x64 (bullseye) 
 vultr-cli instance create --region ewr --plan vc2-1c-0.5gb --os 477 -s $VULTR_SSH_KEY
+# 统计服务启动耗时
+TIME=$(date +%s)
 # 循环直到 vultr-cli instance list | grep 'Debian 11 x64 (bullseye)' | awk  '{print $2}' 有值
 while [ -z "$(vultr-cli instance list | grep 'Debian 11 x64 (bullseye)' | awk  '{print $2}')" ]; do
     sleep 1
@@ -108,10 +119,10 @@ echo "first finshed"
 echo "------------------------------------------"
 # 远程执行 source <(curl -sL https://multi.netlify.app/v2ray.sh) --zh > v2ray.log
 echo "start create v2ray"
-ssh root@$instanceip 'source <(curl -sL https://multi.netlify.app/v2ray.sh) --zh' | grep vmess > /tmp/vmess.txt
+ssh root@$instanceip 'source <(curl -sL https://multi.netlify.app/v2ray.sh) --zh > /tmp/vmess.txt && cat /tmp/vmess.txt ' | grep vmess > /tmp/vmess.txt
 echo "finish create v2ray"
 echo "------------------------------------------"
-echo "start up speed"
+echo "start speed up"
 ssh root@$instanceip "wget -N --no-check-certificate 'https://raw.githubusercontent.com/chiakge/Linux-NetSpeed/master/tcp.sh' && chmod +x tcp.sh"
 
 # 启动加速
@@ -137,8 +148,18 @@ sleep 2
 send "exit\r"
 EOF
 
-echo "end up speed"
+echo "end speed up"
 echo "------------------------------------------"
-
+clear
+else
+    echo "服务已启动:"
+    # 获取ip 
+    instanceip=$(vultr-cli instance list | grep 'Debian 11 x64 (bullseye)' | awk  '{print $2}')
+fi
 # cat远端的v2ray.log
-cat /tmp/vmess.txt 
+ssh root@$instanceip "v2ray-util info | grep vmess" 
+
+# 输出服务创建耗时
+if [ -z "$TIME" ];then
+    echo "服务创建耗时: "$(($(date +%s)-TIME))s
+fi
